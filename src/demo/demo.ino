@@ -5,6 +5,7 @@
 
 Zumo32U4LCD lcd;
 Zumo32U4ButtonA buttonA;
+Zumo32U4ButtonB buttonB;
 Zumo32U4Buzzer buzzer;
 Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
@@ -74,6 +75,7 @@ enum State
   StateScanning,
   StateDriving,
   StateBacking,
+  StateRotating
 };
 
 State state = StatePausing;
@@ -111,7 +113,8 @@ void setup() {
 }
 
 void loop() {
-  bool buttonPress = buttonA.getSingleDebouncedPress();
+  bool buttonAPressed = buttonA.getSingleDebouncedPress();
+  bool buttonBPressed = buttonB.getSingleDebouncedPress();
 
   if (state == StatePausing)
   {
@@ -133,25 +136,24 @@ void loop() {
       lcd.print(readBatteryMillivolts());
     }
 
-    if (buttonPress)
+    if (buttonAPressed)
     {
       // The user pressed button A, so go to the waiting state.
-      changeState(StateWaiting);
+      changeState(StateScanning);
+    }
+    if (buttonBPressed)
+    {
+      changeState(StateRotating);
     }
   }
-  else if (buttonPress)
+  else if (buttonAPressed)
   {
     // The user pressed button A while the robot was running, so pause.
     changeState(StatePausing);
   }
-  else {
+  else if (state == StateScanning) {
     // Read the proximity sensors to see if know where the opponent is.
     proxSensors.read();
-
-    // distance = 0 ~ 12, 0 means nothing found, 12 means very close.
-    // oponentDirection = minus means left, plus means right.
-    // uint8_t distance = proxSensors.countsFrontWithRightLeds() + proxSensors.countsFrontWithLeftLeds();
-    // int8_t oponentDirection = proxSensors.countsFrontWithRightLeds() - proxSensors.countsFrontWithLeftLeds();
 
     lcd.clear();
     lcd.print("D ");
@@ -160,6 +162,10 @@ void loop() {
 
     lcd.print("L/R ");
     lcd.print(assUtils.getOpponentDirection(proxSensors));
+  }
+  else if (state == StateRotating)
+  {
+    assUtils.setRotate(motors);
   }
 }
 
