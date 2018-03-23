@@ -104,12 +104,18 @@ bool justChangedState;
 // This gets set whenever we clear the display.
 bool displayCleared;
 
+// Rotating count.
+uint16_t rotateCount;
+
+
 void setup() {
   // put your setup code here, to run once:
   lineSensors.initThreeSensors();
   proxSensors.initThreeSensors();
 
   changeState(StatePausing);
+
+  rotateCount = 0;
 }
 
 void loop() {
@@ -165,7 +171,26 @@ void loop() {
   }
   else if (state == StateRotating)
   {
-    assUtils.setRotate(motors);
+    // Read the proximity sensors to see if know where the opponent is.
+    proxSensors.read();
+
+    // Attack if the opponent close enough.
+    if (rotateCount >= 50 && assUtils.getOpponentDistance(proxSensors) >= 4) {
+      // Move forward to opponent
+      motors.setSpeeds(400, 400);
+
+      // Go to rotating mode after attacking for some time.
+      if (rotateCount >= 100) {
+        rotateCount = 0;
+      }
+    }
+    else
+    {
+      // Keep rotating.
+      assUtils.setRotate(motors);
+    }
+
+    rotateCount++;
   }
 }
 
