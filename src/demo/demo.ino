@@ -43,7 +43,7 @@ const uint16_t veerSpeedHigh = 250;
 // front of it, either with the proximity sensors or by noticing
 // that it is caught in a stalemate (driving forward for several
 // seconds without reaching a border).  400 is full speed.
-const uint16_t rammingSpeed = 400;
+const uint16_t rammingSpeed = 700;
 
 // The amount of time to spend backing up after detecting a
 // border, in milliseconds.
@@ -60,7 +60,7 @@ const uint16_t scanTimeMax = 2100;
 // The amount of time to wait between detecting a button press
 // and actually starting to move, in milliseconds.  Typical robot
 // sumo rules require 5 seconds of waiting.
-const uint16_t waitTime = 1000;
+const uint16_t waitTime = 3000;
 
 // If the robot has been driving forward for this amount of time,
 // in milliseconds, without reaching a border, the robot decides
@@ -80,7 +80,8 @@ enum State
   StateBacking,
   StateDefensiveMode,
   StateOffensiveMode,
-  StateFighting
+  StateFighting,
+  StateExpandSheild
 };
 
 State prevState = StatePausing;
@@ -159,7 +160,7 @@ void loop() {
     }
     if (buttonCPressed)
     {
-      changeState(StateBacking);
+      changeState(StateExpandSheild);
     }
   }
   else if (buttonAPressed)
@@ -182,15 +183,25 @@ void loop() {
     else
     {
       // We have waited long enough.  Start moving.
-      changeState(StateFighting);
+      changeState(StateExpandSheild);
     }
   }
   else if (state == StateFighting) {
     // Random choose between StateDefensiveMode or StateOffensiveMode
-    if (random(0, 2) == 0) {
-        changeState(StateDefensiveMode);
+//    if (random(0, 2) == 0) {
+//        changeState(StateDefensiveMode);
+//    } else {
+//        changeState(StateOffensiveMode);
+//    }
+    changeState(StateOffensiveMode);
+  }
+  else if (state == StateExpandSheild) {
+    if (timeInThisState() < 200) {
+      motors.setSpeeds(400, 400); 
+    } else if (timeInThisState() >= 200 && timeInThisState() < 400) {
+      motors.setSpeeds(-400, -400);
     } else {
-        changeState(StateOffensiveMode);
+      changeState(StateFighting);
     }
   }
   else if (state == StateBacking)
@@ -220,7 +231,7 @@ void loop() {
   else if (state == StateOffensiveMode)
   {
     if ( timeInThisState() < changeModeWaitTime) {
-      offensiveMove();
+      offensiveMode();
     }
     else {
       changeState(StateFighting);
@@ -228,7 +239,7 @@ void loop() {
   }
 }
 
-void offensiveMove()
+void offensiveMode()
 {
   // Check for borders.
   lineSensors.read(lineSensorValues);
