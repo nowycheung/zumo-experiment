@@ -6,6 +6,7 @@
 Zumo32U4LCD lcd;
 Zumo32U4ButtonA buttonA;
 Zumo32U4ButtonB buttonB;
+Zumo32U4ButtonC buttonC;
 Zumo32U4Buzzer buzzer;
 Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
@@ -59,13 +60,15 @@ const uint16_t scanTimeMax = 2100;
 // The amount of time to wait between detecting a button press
 // and actually starting to move, in milliseconds.  Typical robot
 // sumo rules require 5 seconds of waiting.
-const uint16_t waitTime = 5000;
+const uint16_t waitTime = 1000;
 
 // If the robot has been driving forward for this amount of time,
 // in milliseconds, without reaching a border, the robot decides
 // that it must be pushing on another robot and this is a
 // stalemate, so it increases its motor speed.
 const uint16_t stalemateTime = 4000;
+
+const uint16_t changeModeWaitTime = 5000;
 
 // This enum lists the top-level states that the robot can be in.
 enum State
@@ -75,9 +78,12 @@ enum State
   StateScanning,
   StateDriving,
   StateBacking,
-  StateRotating
+  StateDefensiveMode,
+  StateOffensiveMode,
+  StateFighting
 };
 
+State prevState = StatePausing;
 State state = StatePausing;
 
 enum Direction
@@ -121,6 +127,7 @@ void setup() {
 void loop() {
   bool buttonAPressed = buttonA.getSingleDebouncedPress();
   bool buttonBPressed = buttonB.getSingleDebouncedPress();
+  bool buttonCPressed = buttonC.getSingleDebouncedPress();
 
   if (state == StatePausing)
   {
@@ -144,12 +151,15 @@ void loop() {
 
     if (buttonAPressed)
     {
-      // The user pressed button A, so go to the waiting state.
       changeState(StateScanning);
     }
     if (buttonBPressed)
     {
-      changeState(StateRotating);
+      changeState(StateWaiting);
+    }
+    if (buttonCPressed)
+    {
+      changeState(StateBacking);
     }
   }
   else if (buttonAPressed)
@@ -157,49 +167,190 @@ void loop() {
     // The user pressed button A while the robot was running, so pause.
     changeState(StatePausing);
   }
-  else if (state == StateScanning) {
-    // Read the proximity sensors to see if know where the opponent is.
-    proxSensors.read();
+  else if (state == StateWaiting) {
+    uint16_t time = timeInThisState();
 
-    lcd.clear();
-    lcd.print("D ");
-    lcd.print(assUtils.getOpponentDistance(proxSensors));
-    lcd.gotoXY(0, 1);
-
-    lcd.print("L/R ");
-    lcd.print(assUtils.getOpponentDirection(proxSensors));
-  }
-  else if (state == StateRotating)
-  {
-    // Read the proximity sensors to see if know where the opponent is.
-    proxSensors.read();
-
-    // Attack if the opponent close enough.
-    if (rotateCount >= 50 && assUtils.getOpponentDistance(proxSensors) >= 4) {
-      // Move forward to opponent
-      motors.setSpeeds(400, 400);
-
-      // Go to rotating mode after attacking for some time.
-      if (rotateCount >= 100) {
-        rotateCount = 0;
-      }
+    if (time < waitTime)
+    {
+      // Display the remaining time we have to wait.
+      uint16_t timeLeft = waitTime - time;
+      lcd.gotoXY(0, 0);
+      lcd.print(timeLeft / 1000 % 10);
+      lcd.print('.');
+      lcd.print(timeLeft / 100 % 10);
     }
     else
     {
-      // Keep rotating.
-      assUtils.setRotate(motors);
+      // We have waited long enough.  Start moving.
+      changeState(StateFighting);
     }
+  }
+  else if (state == StateFighting) {
+    // Random choose between StateDefensiveMode or StateOffensiveMode
+    if (random(0, 2) == 0) {
+        changeState(StateDefensiveMode);
+    } else {
+        changeState(StateOffensiveMode);
+    }
+  }
+  else if (state == StateBacking)
+  {
+    // In this state, the robot drives in reverse.
 
-    rotateCount++;
+    motors.setSpeeds(-reverseSpeed, -reverseSpeed);
+
+    // After backing up for a specific amount of time, start
+    // scanning.
+    if (timeInThisState() >= reverseTime) {
+      changeState(StateFighting);
+    }
+  }
+  else if (state == StateScanning) {
+    scanMode();
+  }
+  else if (state == StateDefensiveMode)
+  {
+    if ( timeInThisState() < changeModeWaitTime) {
+      defensiveMode();
+    }
+    else {
+      changeState(StateFighting);
+    }
+  }
+  else if (state == StateOffensiveMode)
+  {
+    if ( timeInThisState() < changeModeWaitTime) {
+      offensiveMove();
+    }
+    else {
+      changeState(StateFighting);
+    }
   }
 }
 
-// Gets the amount of time we have been in this state, in
-// milliseconds.  After 65535 milliseconds (65 seconds), this
-// overflows to 0.
-uint16_t timeInThisState()
+void offensiveMove()
 {
-  return (uint16_t)(millis() - stateStartTime);
+  // Check for borders.
+  lineSensors.read(lineSensorValues);
+
+  if (lineSensorValues[0] < lineSensorThreshold)
+  {
+    scanDir = DirectionRight;
+    changeState(StateBacking);
+  }
+  if (lineSensorValues[2] < lineSensorThreshold)
+  {
+    scanDir = DirectionLeft;
+    changeState(StateBacking);
+  }
+
+  // Read the proximity sensors to see if know where the
+  // opponent is.
+  proxSensors.read();
+  uint8_t sum = proxSensors.countsFrontWithRightLeds() + proxSensors.countsFrontWithLeftLeds();
+  int8_t diff = proxSensors.countsFrontWithRightLeds() - proxSensors.countsFrontWithLeftLeds();
+
+  if (sum >= 4 || timeInThisState() > stalemateTime)
+  {
+    // The front sensor is getting a strong signal, or we have
+    // been driving forward for a while now without seeing the
+    // border.  Either way, there is probably a robot in front
+    // of us and we should switch to ramming speed to try to
+    // push the robot out of the ring.
+    motors.setSpeeds(rammingSpeed, rammingSpeed);
+
+    // Turn on the red LED when ramming.
+    ledRed(1);
+  }
+  else if (sum == 0)
+  {
+    // We don't see anything with the front sensor, so just
+    // keep driving forward.  Also monitor the side sensors; if
+    // they see an object then we want to go to the scanning
+    // state and turn torwards that object.
+
+    motors.setSpeeds(forwardSpeed, forwardSpeed);
+
+//    if (proxSensors.countsLeftWithLeftLeds() >= 2)
+//    {
+//      // Detected something to the left.
+//      scanDir = DirectionLeft;
+//      changeState(StateScanning);
+//    }
+//
+//    if (proxSensors.countsRightWithRightLeds() >= 2)
+//    {
+//      // Detected something to the right.
+//      scanDir = DirectionRight;
+//      changeState(StateScanning);
+//    }
+
+    ledRed(0);
+  }
+  else
+  {
+    // We see something with the front sensor but it is not a
+    // strong reading.
+
+    if (diff >= 1)
+    {
+      // The right-side reading is stronger, so veer to the right.
+      motors.setSpeeds(veerSpeedHigh, veerSpeedLow);
+    }
+    else if (diff <= -1)
+    {
+      // The left-side reading is stronger, so veer to the left.
+      motors.setSpeeds(veerSpeedLow, veerSpeedHigh);
+    }
+    else
+    {
+      // Both readings are equal, so just drive forward.
+      motors.setSpeeds(forwardSpeed, forwardSpeed);
+    }
+    ledRed(0);
+  }
+}
+
+void defensiveMode()
+{
+  // Read the proximity sensors to see if know where the opponent is.
+  proxSensors.read();
+
+  // Attack if the opponent is close enough.
+  if (assUtils.getOpponentDistance(proxSensors) >= 2) {
+
+    // Todo : Check the border before moving forward
+
+    // Move forward to opponent
+    motors.setSpeeds(400, 400);
+
+    // Go to rotating mode after attacking for some time.
+    if (rotateCount >= 100) {
+      rotateCount = 0;
+    }
+  }
+  else
+  {
+    // Keep rotating.
+    assUtils.setRotate(motors, 200);
+  }
+
+  rotateCount++;
+}
+
+void scanMode()
+{
+  motors.setSpeeds(0, 0);
+  // Read the proximity sensors to see if know where the opponent is.
+  proxSensors.read();
+
+  lcd.clear();
+  lcd.print("D ");
+  lcd.print(assUtils.getOpponentDistance(proxSensors));
+  lcd.gotoXY(0, 1);
+
+  lcd.print("L/R ");
+  lcd.print(assUtils.getOpponentDirection(proxSensors));
 }
 
 // Changes to a new state.  It also clears the LCD and turns off
@@ -207,6 +358,7 @@ uint16_t timeInThisState()
 // not affect the feedback the user sees in the new state.
 void changeState(uint8_t newState)
 {
+  prevState = state;
   state = (State)newState;
   justChangedState = true;
   stateStartTime = millis();
@@ -233,4 +385,9 @@ void displayUpdated()
 {
   displayTime = millis();
   displayCleared = false;
+}
+
+uint16_t timeInThisState()
+{
+  return (uint16_t)(millis() - stateStartTime);
 }
