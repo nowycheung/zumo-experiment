@@ -114,6 +114,32 @@ bool displayCleared;
 // Rotating count.
 uint16_t rotateCount;
 
+const char march[] PROGMEM = 
+"! O2 T100 MS"
+"a8. r16 a8. r16 a8. r16 f8 r16 >c16" 
+"ML"
+"a8. r16 f8 r16" "MS" ">c16 a. r8"
+"O3"
+"e8. r16 e8. r16 e8. r16 f8 r16 <c16"
+"O2 ML"
+"a-8. r16" "MS" "f8 r16 >c16 a r"
+
+"O3 ML"
+"a8. r16 <a8 r16 <a16" "MS" "a8. r16 a-8 r16 g16"
+"ML V10"
+"g-16 f16 g-16 r16 r8 <b-16 r16" "MS" "e-8. r16 d8." "ML" "d-16"
+"c16 <c-16 c16 r16 r8" "MS O2" "f16 r16 a-8. r16 f8. a-16"
+"O3"
+"c8. r16 <a8 r16 c16 e2. r8"
+
+"O3 ML"
+"a8. r16 <a8 r16 <a16" "MS" "a8. r16 a-8 r16 g16"
+"ML V10"
+"g-16 f16 g-16 r16 r8 <b-16 r16" "MS" "e-8. r16 d8." "ML" "d-16"
+"c16 <c-16 c16 r16 r8" "MS O2" "f16 r16 a-8. r16 f8. >c16"
+"ML"
+"a8. r16 f8 r16 >c16 a2. r8"
+;
 
 void setup() {
   // put your setup code here, to run once:
@@ -218,6 +244,13 @@ void loop() {
   }
   else if (state == StateScanning) {
     scanMode();
+    if (buzzer.isPlaying())
+    {  
+    }
+    else
+    {
+      buzzer.playFromProgramSpace(march);
+    }
   }
   else if (state == StateDefensiveMode)
   {
