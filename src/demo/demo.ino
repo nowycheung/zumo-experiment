@@ -82,7 +82,7 @@ enum State
   StateDefensiveMode,
   StateOffensiveMode,
   StateFighting,
-  StateExpandSheild
+  StateExpandShield
 };
 
 State prevState = StatePausing;
@@ -126,137 +126,147 @@ void setup() {
 }
 
 void loop() {
-  bool buttonAPressed = buttonA.getSingleDebouncedPress();
-  bool buttonBPressed = buttonB.getSingleDebouncedPress();
-  bool buttonCPressed = buttonC.getSingleDebouncedPress();
-
-  if (state == StatePausing)
-  {
-    // In this state, we just wait for the user to press button
-    // A, while displaying the battery voltage every 100 ms.
-
-    motors.setSpeeds(0, 0);
-
-    if (justChangedState)
-    {
-      justChangedState = false;
-      lcd.print(F("Press A"));
-    }
-
-    if (displayIsStale(100))
-    {
-      displayUpdated();
-      lcd.gotoXY(0, 1);
-      lcd.print(readBatteryMillivolts());
-    }
-
-    if (buttonAPressed)
-    {
-      changeState(StateScanning);
-    }
-    if (buttonBPressed)
-    {
-      changeState(StateExpandSheild);
-    }
-    if (buttonCPressed)
-    {
-      changeState(StateWaiting);
-    }
-
-    buzzer.stopPlaying();
+  switch(state) {
+    case StatePausing:
+      pause(buttonA, buttonB, buttonC);
+    break;
+    case StateWaiting:
+      waiting();
+    break;
+    case StateFighting:
+      fighting();
+    break;
+    case StateExpandShield:
+      expandShield();
+    break;
+    case StateBacking:
+      backing();
+    break;
+    case StateScanning:
+      scanning();
+    break;
+    case StateDefensiveMode:
+      if ( timeInThisState() < changeModeWaitTime) {
+        defensiveMode();
+      }
+      else {
+        changeState(StateFighting);
+      }
+    break;
+    case StateOffensiveMode:
+      if ( timeInThisState() < changeModeWaitTime) {
+        offensiveMode();
+      }
+      else {
+        changeState(StateFighting);
+      }
+    break;
   }
-  else if (buttonAPressed)
+
+  if (buttonA.getSingleDebouncedPress())
   {
     // The user pressed button A while the robot was running, so pause.
     changeState(StatePausing);
   }
-  else if (state == StateWaiting) {
-    // lcd.print("StateWaiting");
-    uint16_t time = timeInThisState();
+}
 
-    if (time < waitTime)
-    {
-      // Display the remaining time we have to wait.
-      uint16_t timeLeft = waitTime - time;
-      lcd.gotoXY(0, 0);
-      lcd.print(timeLeft / 1000 % 10);
-      lcd.print('.');
-      lcd.print(timeLeft / 100 % 10);
-    }
-    else
-    {
-      // We have waited long enough.  Start moving.
-      changeState(StateExpandSheild);
-    }
+void backing() {
+  // In this state, the robot drives in reverse.
+  motors.setSpeeds(-reverseSpeed, -reverseSpeed);
 
-    if (!buzzer.isPlaying())
-    {
-      buzzer.playFromProgramSpace(STAR_WARS);
-    }
+  // After backing up for a specific amount of time, start
+  // scanning.
+  if (timeInThisState() >= reverseTime) {
+    changeState(StateScanning);
   }
-  else if (state == StateFighting) {
-    // Random choose between StateDefensiveMode or StateOffensiveMode
-    if (0 == 0) {  // random(0, 2) => 0, 1
-      changeState(StateOffensiveMode);
-    } else {
-      changeState(StateDefensiveMode);
-    }
+}
 
-    if (!buzzer.isPlaying())
-    {
-      buzzer.playFromProgramSpace(STAR_WARS);
-    }
+void expandShield() {
+  if (timeInThisState() < 200) {
+    motors.setSpeeds(400, 400);
+  } else if (timeInThisState() >= 200 && timeInThisState() < 400) {
+    motors.setSpeeds(-400, -400);
+  } else {
+    changeState(StateFighting);
   }
-  else if (state == StateExpandSheild) {
-    // lcd.print("StateExpandSheild");
-    if (timeInThisState() < 200) {
-      motors.setSpeeds(400, 400); 
-    } else if (timeInThisState() >= 200 && timeInThisState() < 400) {
-      motors.setSpeeds(-400, -400);
-    } else {
-      changeState(StateFighting);
-    }
+}
+
+void playSound() {
+  if (!buzzer.isPlaying()) {
+    buzzer.playFromProgramSpace(STAR_WARS);
   }
-  else if (state == StateBacking)
+}
+
+void fighting() {
+  // Random choose between StateDefensiveMode or StateOffensiveMode
+  if (0 == 0) {  // Disabled temporary. Use "random(0, 2)" to make random => 0, 1
+    changeState(StateOffensiveMode);
+  } else {
+    changeState(StateDefensiveMode);
+  }
+
+  
+  playSound();
+}
+
+void waiting() {
+  uint16_t time = timeInThisState();
+
+  if (time < waitTime)
   {
-    // lcd.print("StateBacking");
-    // In this state, the robot drives in reverse.
-
-    motors.setSpeeds(-reverseSpeed, -reverseSpeed);
-
-    // After backing up for a specific amount of time, start
-    // scanning.
-    if (timeInThisState() >= reverseTime) {
-      changeState(StateScanning);
-    }
+    // Display the remaining time we have to wait.
+    uint16_t timeLeft = waitTime - time;
+    lcd.gotoXY(0, 0);
+    lcd.print(timeLeft / 1000 % 10);
+    lcd.print('.');
+    lcd.print(timeLeft / 100 % 10);
   }
-  else if (state == StateScanning) {
-    scanMode();
-  }
-  else if (state == StateDefensiveMode)
+  else
   {
-    if ( timeInThisState() < changeModeWaitTime) {
-      defensiveMode();
-    }
-    else {
-      changeState(StateFighting);
-    }
+    // We have waited long enough.  Start moving.
+    changeState(StateExpandShield);
   }
-  else if (state == StateOffensiveMode)
+
+  playSound();
+}
+
+void pause(Zumo32U4ButtonA buttonA, Zumo32U4ButtonB buttonB, Zumo32U4ButtonC buttonC) {
+  // In this state, we just wait for the user to press button
+  // A, while displaying the battery voltage every 100 ms.
+
+  motors.setSpeeds(0, 0);
+
+  if (justChangedState)
   {
-    if ( timeInThisState() < changeModeWaitTime) {
-      offensiveMode();
-    }
-    else {
-      changeState(StateFighting);
-    }
+    justChangedState = false;
+    lcd.print(F("Press A"));
   }
+
+  if (displayIsStale(100))
+  {
+    displayUpdated();
+    lcd.gotoXY(0, 1);
+    lcd.print(readBatteryMillivolts());
+  }
+
+  if (buttonA.getSingleDebouncedPress())
+  {
+    changeState(StateScanning);
+  }
+  if (buttonB.getSingleDebouncedPress())
+  {
+    changeState(StateExpandShield);
+  }
+  if (buttonC.getSingleDebouncedPress())
+  {
+    changeState(StateWaiting);
+  }
+
+  buzzer.stopPlaying();
 }
 
 void offensiveMode()
 {
-  // lcd.print("StateOffensiveMode");
-  // Check for borders.
   lineSensors.read(lineSensorValues);
 
   if (lineSensorValues[0] < lineSensorThreshold)
@@ -364,7 +374,7 @@ void defensiveMode()
   rotateCount++;
 }
 
-void scanMode()
+void scanning()
 {
   // In this state the robot rotates in place and tries to find
   // its opponent.
