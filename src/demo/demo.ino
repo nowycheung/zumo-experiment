@@ -37,7 +37,7 @@ const uint16_t forwardSpeed = 200;
 // when veering left or veering right.  While the robot is
 // driving forward, it uses its proximity sensors to scan for
 // objects ahead of it and tries to veer towards them.
-const uint16_t veerSpeedLow = 0;
+const uint16_t veerSpeedLow = 10;
 const uint16_t veerSpeedHigh = 250;
 
 // The speed that the robot drives when it detects an opponent in
