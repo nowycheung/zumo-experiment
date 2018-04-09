@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <Zumo32U4.h>
 #include "AssassinatorUtility.h"
+#include "SoundTrack.h"
 
 Zumo32U4LCD lcd;
 Zumo32U4ButtonA buttonA;
@@ -47,7 +48,7 @@ const uint16_t rammingSpeed = 700;
 
 // The amount of time to spend backing up after detecting a
 // border, in milliseconds.
-const uint16_t reverseTime = 200;
+const uint16_t reverseTime = 300;
 
 // The minimum amount of time to spend scanning for nearby
 // opponents, in milliseconds.
@@ -55,18 +56,18 @@ const uint16_t scanTimeMin = 200;
 
 // The maximum amount of time to spend scanning for nearby
 // opponents, in milliseconds.
-const uint16_t scanTimeMax = 2100;
+const uint16_t scanTimeMax = 700;
 
 // The amount of time to wait between detecting a button press
 // and actually starting to move, in milliseconds.  Typical robot
 // sumo rules require 5 seconds of waiting.
-const uint16_t waitTime = 3000;
+const uint16_t waitTime = 5000;
 
 // If the robot has been driving forward for this amount of time,
 // in milliseconds, without reaching a border, the robot decides
 // that it must be pushing on another robot and this is a
 // stalemate, so it increases its motor speed.
-const uint16_t stalemateTime = 4000;
+const uint16_t stalemateTime = 6000;
 
 const uint16_t changeModeWaitTime = 5000;
 
@@ -114,33 +115,6 @@ bool displayCleared;
 // Rotating count.
 uint16_t rotateCount;
 
-const char march[] PROGMEM = 
-"! O2 T100 MS"
-"a8. r16 a8. r16 a8. r16 f8 r16 >c16" 
-"ML"
-"a8. r16 f8 r16" "MS" ">c16 a. r8"
-"O3"
-"e8. r16 e8. r16 e8. r16 f8 r16 <c16"
-"O2 ML"
-"a-8. r16" "MS" "f8 r16 >c16 a r"
-
-"O3 ML"
-"a8. r16 <a8 r16 <a16" "MS" "a8. r16 a-8 r16 g16"
-"ML V10"
-"g-16 f16 g-16 r16 r8 <b-16 r16" "MS" "e-8. r16 d8." "ML" "d-16"
-"c16 <c-16 c16 r16 r8" "MS O2" "f16 r16 a-8. r16 f8. a-16"
-"O3"
-"c8. r16 <a8 r16 c16 e2. r8"
-
-"O3 ML"
-"a8. r16 <a8 r16 <a16" "MS" "a8. r16 a-8 r16 g16"
-"ML V10"
-"g-16 f16 g-16 r16 r8 <b-16 r16" "MS" "e-8. r16 d8." "ML" "d-16"
-"c16 <c-16 c16 r16 r8" "MS O2" "f16 r16 a-8. r16 f8. >c16"
-"ML"
-"a8. r16 f8 r16 >c16 a2. r8"
-;
-
 void setup() {
   // put your setup code here, to run once:
   lineSensors.initThreeSensors();
@@ -182,12 +156,14 @@ void loop() {
     }
     if (buttonBPressed)
     {
-      changeState(StateWaiting);
+      changeState(StateExpandSheild);
     }
     if (buttonCPressed)
     {
-      changeState(StateExpandSheild);
+      changeState(StateWaiting);
     }
+
+    buzzer.stopPlaying();
   }
   else if (buttonAPressed)
   {
@@ -195,6 +171,7 @@ void loop() {
     changeState(StatePausing);
   }
   else if (state == StateWaiting) {
+    // lcd.print("StateWaiting");
     uint16_t time = timeInThisState();
 
     if (time < waitTime)
@@ -211,17 +188,27 @@ void loop() {
       // We have waited long enough.  Start moving.
       changeState(StateExpandSheild);
     }
+
+    if (!buzzer.isPlaying())
+    {
+      buzzer.playFromProgramSpace(STAR_WARS);
+    }
   }
   else if (state == StateFighting) {
     // Random choose between StateDefensiveMode or StateOffensiveMode
-//    if (random(0, 2) == 0) {
-//        changeState(StateDefensiveMode);
-//    } else {
-//        changeState(StateOffensiveMode);
-//    }
-    changeState(StateOffensiveMode);
+    if (0 == 0) {  // random(0, 2) => 0, 1
+      changeState(StateOffensiveMode);
+    } else {
+      changeState(StateDefensiveMode);
+    }
+
+    if (!buzzer.isPlaying())
+    {
+      buzzer.playFromProgramSpace(STAR_WARS);
+    }
   }
   else if (state == StateExpandSheild) {
+    // lcd.print("StateExpandSheild");
     if (timeInThisState() < 200) {
       motors.setSpeeds(400, 400); 
     } else if (timeInThisState() >= 200 && timeInThisState() < 400) {
@@ -232,6 +219,7 @@ void loop() {
   }
   else if (state == StateBacking)
   {
+    // lcd.print("StateBacking");
     // In this state, the robot drives in reverse.
 
     motors.setSpeeds(-reverseSpeed, -reverseSpeed);
@@ -239,18 +227,11 @@ void loop() {
     // After backing up for a specific amount of time, start
     // scanning.
     if (timeInThisState() >= reverseTime) {
-      changeState(StateFighting);
+      changeState(StateScanning);
     }
   }
   else if (state == StateScanning) {
     scanMode();
-    if (buzzer.isPlaying())
-    {  
-    }
-    else
-    {
-      buzzer.playFromProgramSpace(march);
-    }
   }
   else if (state == StateDefensiveMode)
   {
@@ -274,6 +255,7 @@ void loop() {
 
 void offensiveMode()
 {
+  // lcd.print("StateOffensiveMode");
   // Check for borders.
   lineSensors.read(lineSensorValues);
 
@@ -315,19 +297,19 @@ void offensiveMode()
 
     motors.setSpeeds(forwardSpeed, forwardSpeed);
 
-//    if (proxSensors.countsLeftWithLeftLeds() >= 2)
-//    {
-//      // Detected something to the left.
-//      scanDir = DirectionLeft;
-//      changeState(StateScanning);
-//    }
-//
-//    if (proxSensors.countsRightWithRightLeds() >= 2)
-//    {
-//      // Detected something to the right.
-//      scanDir = DirectionRight;
-//      changeState(StateScanning);
-//    }
+   if (proxSensors.countsLeftWithLeftLeds() >= 2)
+   {
+     // Detected something to the left.
+     scanDir = DirectionLeft;
+     changeState(StateScanning);
+   }
+
+   if (proxSensors.countsRightWithRightLeds() >= 2)
+   {
+     // Detected something to the right.
+     scanDir = DirectionRight;
+     changeState(StateScanning);
+   }
 
     ledRed(0);
   }
@@ -383,6 +365,45 @@ void defensiveMode()
 }
 
 void scanMode()
+{
+  // In this state the robot rotates in place and tries to find
+  // its opponent.
+
+  if (justChangedState)
+  {
+    justChangedState = false;
+    lcd.print(F("scan"));
+  }
+
+  if (scanDir == DirectionRight)
+  {
+    motors.setSpeeds(turnSpeed, -turnSpeed);
+  }
+  else
+  {
+    motors.setSpeeds(-turnSpeed, turnSpeed);
+  }
+
+  uint16_t time = timeInThisState();
+
+  if (time > scanTimeMax)
+  {
+    // We have not seen anything for a while, so start driving.
+    changeState(StateFighting);
+  }
+  else if (time > scanTimeMin)
+  {
+    // Read the proximity sensors.  If we detect anything with
+    // the front sensor, then start driving forwards.
+    proxSensors.read();
+    if (proxSensors.countsFrontWithLeftLeds() >= 2 || proxSensors.countsFrontWithRightLeds() >= 2)
+    {
+      changeState(StateFighting);
+    }
+  }
+}
+
+void somethingYouWantToTest()
 {
   motors.setSpeeds(0, 0);
   // Read the proximity sensors to see if know where the opponent is.
