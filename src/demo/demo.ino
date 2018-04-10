@@ -283,10 +283,10 @@ void offensiveMode()
   // Read the proximity sensors to see if know where the
   // opponent is.
   proxSensors.read();
-  uint8_t sum = proxSensors.countsFrontWithRightLeds() + proxSensors.countsFrontWithLeftLeds();
-  int8_t diff = proxSensors.countsFrontWithRightLeds() - proxSensors.countsFrontWithLeftLeds();
+  uint8_t opponentDistance = assUtils.getOpponentDistance(proxSensors);
+  int8_t opponentDirection = assUtils.getOpponentDirection(proxSensors);
 
-  if (sum >= 4 || timeInThisState() > stalemateTime)
+  if (opponentDistance >= 4 || timeInThisState() > stalemateTime)
   {
     // The front sensor is getting a strong signal, or we have
     // been driving forward for a while now without seeing the
@@ -298,7 +298,7 @@ void offensiveMode()
     // Turn on the red LED when ramming.
     ledRed(1);
   }
-  else if (sum == 0)
+  else if (opponentDistance == 0)
   {
     // We don't see anything with the front sensor, so just
     // keep driving forward.  Also monitor the side sensors; if
@@ -328,12 +328,12 @@ void offensiveMode()
     // We see something with the front sensor but it is not a
     // strong reading.
 
-    if (diff >= 1)
+    if (opponentDirection >= 1)
     {
       // The right-side reading is stronger, so veer to the right.
       motors.setSpeeds(veerSpeedHigh, veerSpeedLow);
     }
-    else if (diff <= -1)
+    else if (opponentDirection <= -1)
     {
       // The left-side reading is stronger, so veer to the left.
       motors.setSpeeds(veerSpeedLow, veerSpeedHigh);
