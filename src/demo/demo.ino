@@ -128,7 +128,7 @@ void setup() {
 void loop() {
   switch(state) {
     case StatePausing:
-      pause(buttonA, buttonB, buttonC);
+      pause(buttonA.getSingleDebouncedPress(), buttonB.getSingleDebouncedPress(), buttonC.getSingleDebouncedPress());
     break;
     case StateWaiting:
       waiting();
@@ -163,7 +163,7 @@ void loop() {
     break;
   }
 
-  if (buttonA.getSingleDebouncedPress())
+  if (buttonA.getSingleDebouncedPress() && state != StatePausing)
   {
     // The user pressed button A while the robot was running, so pause.
     changeState(StatePausing);
@@ -217,6 +217,8 @@ void waiting() {
     // Display the remaining time we have to wait.
     uint16_t timeLeft = waitTime - time;
     lcd.gotoXY(0, 0);
+    lcd.print(F("Counting"));
+    lcd.gotoXY(0, 1);
     lcd.print(timeLeft / 1000 % 10);
     lcd.print('.');
     lcd.print(timeLeft / 100 % 10);
@@ -230,7 +232,7 @@ void waiting() {
   playSound();
 }
 
-void pause(Zumo32U4ButtonA buttonA, Zumo32U4ButtonB buttonB, Zumo32U4ButtonC buttonC) {
+void pause(bool buttonAPressed, bool buttonBPressed, bool buttonCPressed) {
   // In this state, we just wait for the user to press button
   // A, while displaying the battery voltage every 100 ms.
 
@@ -249,15 +251,15 @@ void pause(Zumo32U4ButtonA buttonA, Zumo32U4ButtonB buttonB, Zumo32U4ButtonC but
     lcd.print(readBatteryMillivolts());
   }
 
-  if (buttonA.getSingleDebouncedPress())
+  if (buttonAPressed)
   {
     changeState(StateScanning);
   }
-  if (buttonB.getSingleDebouncedPress())
+  if (buttonBPressed)
   {
     changeState(StateExpandShield);
   }
-  if (buttonC.getSingleDebouncedPress())
+  if (buttonCPressed)
   {
     changeState(StateWaiting);
   }
